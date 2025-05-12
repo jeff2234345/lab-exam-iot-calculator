@@ -1,2 +1,179 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+#include <LiquidCrystal.h> // Included the LCD Library
+#include <Keypad.h>   //  Included the Keypad Library
+
+// LCD Pins (RS,EN,D4,D5,D6,D7)
+const int rs = 8, en = 9, d4 = 10, d5 = 11, d6 = 12, d7 = 13;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7); // Stated the Pin connections for the LCD
+
+// Keypad Setup for a 4x4 Keypad
+const byte ROWS = 4; // Using 4 row connections
+const byte COLS = 4; // Using 4 Column connections
+// Mapping for a 4x4 Keypad
+char keys[ROWS][COLS] = {
+  {'1','2','3','A'}, // A = Addition
+  {'4','5','6','B'}, // B = Subtraction
+  {'7','8','9','C'}, // C = Multiplication
+  {'*','0','#','D'}  // D = Division, * = Clear # = Equals
+};
+// Connections for keypad rows 
+  
+byte rowPins[ROWS] = { A0, A1, A2, A3 }; // Row connections from the keypad
+byte colPins[COLS] = { 4, 5, 6, 7 };    // Column connections from the keypad
+// Creating the keypad object
+Keypad kpd = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+// Calculator Variables
+long num1 = 0, num2 = 0, currentInput = 0, resultValue = 0;
+char key, operation = '\0', lastOp = '\0';
+bool resultReady = false;
+
+// RGB LED Pins Setup
+const int redPin = 2;
+const int greenPin = A4;
+const int bluePin = A5;
+
+// Function to set the RGB LED color
+void setRGB(bool r, bool g, bool b) {
+  digitalWrite(redPin, r ? HIGH : LOW);
+  digitalWrite(greenPin, g ? HIGH : LOW);
+  digitalWrite(bluePin, b ? HIGH : LOW);
+}
+
+void setup() {
+  Serial.begin(9600); // Start the serial monitor
+  lcd.begin(16, 2);    // Initialize the LCD display with 16 columns and 2 rows
+  lcd.print("Calculator"); // Display initial message
+  lcd.setCursor(0, 1);  // Set the cursor to the second line
+  lcd.print("By Antonio"); // Display additional text
+  delay(2000);  // Show for 2 seconds
+  lcd.clear();  // Clear screen only once to avoid flickering
+
+  lcd.setCursor(0, 0); // Move to the first row
+  lcd.print("0");  // Display 0 as default value
+
+  // Setting up the RGB LED pins as outputs
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+  setRGB(0, 0, 0); // Turns off the RGB LED at the start
+}
+
+void loop() {
+  key = kpd.getKey(); //Get key from the keypad
+  if (key != NO_KEY) handleKeyPress(); // The process of when the key is pressed
+  if (resultReady) calculateResult(); // Performing the calculation
+  displayResult(); // Shows the result on the LCD display
+}
+// Handling the key inputs from the keypad
+void handleKeyPress() {
+// Checks if the key pressed is a digit between 0 and 9
+  if (key >= '0' && key <= '9') {
+// Prints the pressed key to the serial monitor to debug
+    Serial.print("Button "); Serial.println(key);
+//  Converts the character digit to the actual value on the LCD
+// Example if key = '5' then digit = 5
+    int digit = key - '0';
+//   Let's you build multi digit numbers basically as the user types 
+// Example 10 * 10 + 4 = 104
+    currentInput = currentInput * 10 + digit;
+// Exits the function after the digit is pressed  
+    return;
+  }
+// Handles reset key '*'
+  if (key == '*') {
+    Serial.println("Button Cancel");
+    num1 = num2 = currentInput = resultValue = 0;
+    operation = lastOp = '\0'; // Resets all values back to 0
+    resultReady = false;
+    lcd.clear(); // Clears the LCD screen
+    setRGB(0, 0, 0); // Turn off RGB LED
+    return;
+  }
+// Handles equal key '#'
+  if (key == '#') {
+    Serial.println("Button Equal");
+    num2 = currentInput; // Saves the second numbers memory
+    lastOp = operation; //  Saves the last operations memory
+    resultReady = true; // Tells the calculator it's ready to calculate
+    return;
+  }
+// Handles the operations keys (A, B ,C D)
+  if (key == 'A' || key == 'B' || key == 'C' || key == 'D') {
+    num1 = currentInput; // Stores the first number
+    currentInput = 0; // Resets the input for the next number
+// Sets operations and RGB LED color based on the key pressed
+    switch (key) {
+      case 'A': 
+        Serial.println("Addition"); 
+        operation = '+'; 
+        setRGB(0, 1, 0);  // Green
+        break;
+      case 'B': 
+        Serial.println("Subtraction"); 
+        operation = '-'; 
+        setRGB(1, 0, 0);  // Red
+        break;
+      case 'C': 
+        Serial.println("Multiplication"); 
+        operation = '*'; 
+        setRGB(0, 0, 1);  // Blue
+        break;
+      case 'D': 
+        Serial.println("Division"); 
+        operation = '/'; 
+        setRGB(1, 1, 0);  // Yellow
+        break;
+    }
+  }
+}
+// Performs the calculation based on which operation is pressed on the keypad
+void calculateResult() {
+  switch (operation) {
+    case '+': resultValue = num1 + num2; break;
+    case '-': resultValue = num1 - num2; break;
+    case '*': resultValue = num1 * num2; break;
+    case '/':
+      if (num2 == 0) {
+// Handles the divide by zero error 
+        lcd.clear();
+        lcd.print("Error: / by 0");
+        delay(2000);
+        currentInput = resultValue = 0;
+        resultReady = false;
+        setRGB(1, 0, 0); // Red for error
+        return;
+      } else {
+        resultValue = num1 / num2;
+      }
+      break;
+  }
+// Tells the calculator to prepare for the next operation
+  currentInput = resultValue;
+  num1 = resultValue;
+  num2 = 0;
+  resultReady = false;
+  operation = '\0';
+}
+// Shows the current result on the LCD display
+void displayResult() {
+  lcd.setCursor(0, 0);
+  lcd.print("      "); // Clears the top row
+  lcd.setCursor(0, 0);
+
+  if (!resultReady && operation != '\0') {
+// Shows the current expression on the LCD like "4-3"
+    lcd.print(num1); lcd.print(operation); lcd.print(currentInput);
+  } else if (!resultReady && operation == '\0') {
+// Shows the number result value only   
+    lcd.print(currentInput);
+  } else {
+// Shows the full result for example "4-3=1"
+    lcd.print(num1); lcd.print(lastOp); lcd.print(num2); lcd.print("=");
+    lcd.print(resultValue);
+  }
+// Shows the current result value on the second row 
+  lcd.setCursor(0, 1);
+  lcd.print(""); // Clears the second row 
+  lcd.setCursor(0, 1);
+  lcd.print(currentInput);
+}
